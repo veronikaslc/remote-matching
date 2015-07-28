@@ -30,23 +30,39 @@ import org.phenotips.remote.common.internal.RemotePatientDisorder;
 import org.phenotips.remote.common.internal.RemotePatientFeature;
 import org.phenotips.remote.common.internal.RemotePatientGene;
 import org.phenotips.remote.common.internal.RemotePatientContactInfo;
+import org.phenotips.vocabulary.Vocabulary;
+import org.phenotips.vocabulary.VocabularyTerm;
 import org.slf4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
+
+import javax.inject.Inject;
+import javax.inject.Named;
 
 import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
 
 public class DefaultJSONToMatchingPatientConverter implements JSONToMatchingPatientConverter
 {
+    private static final String ENSEMBL_GENE_ID_FIELD_NAME = "ensembl_gene_id";
+
+    private static final String ENTREZ_ID_FIELD_NAME = "entrez_id";
+    
     private Logger logger;
 
     private final String apiVersion;
 
     private final Pattern hpoTerm; // not static: may be different from api version to api version
     private final Pattern disorderTerm;
+    
+    @Inject
+    @Named("hgnc")
+    private Vocabulary ontologyService;
 
     public DefaultJSONToMatchingPatientConverter(String apiVersion, Logger logger)
     {
@@ -172,8 +188,21 @@ public class DefaultJSONToMatchingPatientConverter implements JSONToMatchingPati
                         throw new ApiViolationException("A gene has no id");
                     }
                     // TODO: check if name is a valid gene symbol or ensembl id
-                    MatchingPatientGene gene = new RemotePatientGene(geneName);
-                    geneSet.add(gene);
+                    
+                    Collection<String> symbols = new ArrayList<String>();
+                    symbols.add(geneName); 
+                    Set<VocabularyTerm> matches = this.ontologyService.getTerms(symbols);
+
+                    if (matches != null) {
+                        for (VocabularyTerm term : matches) {
+                        	MatchingPatientGene gene = new RemotePatientGene((String) term.get("symbol")); 
+                        	geneSet.add(gene);
+                        }
+                    } else {
+                    	MatchingPatientGene gene = new RemotePatientGene(geneName);
+                    	geneSet.add(gene);
+                    }
+                    
                     // TODO: variants
                 }
                 return geneSet;
